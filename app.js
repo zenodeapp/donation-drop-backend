@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const verifyRoutes = require("./routes/verify");
 const signInRoutes = require("./routes/signIn");
+const reportRoutes = require("./routes/report");
 const errorHandler = require("./middlewares/errorHandler");
 
 const app = express();

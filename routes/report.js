@@ -1,6 +1,8 @@
+const express = require("express");
+const router = express.Router();
 
-import { ethers } from 'ethers';
-import { setTimeout } from 'node:timers/promises';
+const { ethers } = require("ethers");
+const { donationQueryAll, signatureValidityInMin } = require("../db");
 
 const STARTBLOCK = 21454915;
 const TARGET_ADDRESS = '0x15322b546e31F5bfe144C4ae133a9db6f0059fe3';
@@ -13,6 +15,8 @@ const MAX_TOTAL_WEI = etherToWei(0.3)
 // Helpers
 //
 
+const delay = (time) => new Promise((resolve, reject) => setTimeout(resolve, time))
+
 function etherToWei(eth) {
   return BigInt(Math.floor(parseFloat(eth) * 1e18));
 }
@@ -23,41 +27,6 @@ function weiToEther(wei) {
   const fractionalPart = weiStr.slice(-18).replace(/0+$/, '') || '0';
   return `${integerPart}.${fractionalPart}`;
 }
-
-//////////////////////////////////////////////////////////////////////////////////
-//
-// claims
-// resolve ens
-// @todo do these when storing
-//
-////////////////////////////////////////////////////////////////////////////////////
-
-// @todo use real data
-const CLAIMS = [
-  '0xbdbae12f604e50f96afec86c5e56394d29999134',
-  '0x2938218E96ff60445c9156E8Df0f04f723a08307'.toLowerCase(),
-  '0xd9390b46a1749DEe5325A490490491db9a826D1F'
-]
-
-const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_API_KEY}`);
-
-async function resolveENS(claims) {
-  const resolvedClaims = new Set();
-  for(let i = 0; i < CLAIMS.length; i++) {
-    const claim = CLAIMS[i]
-    if (ethers.isAddress(claim)) continue
-    const addr = await provider.resolveName(claim)
-    if(!addr) {
-      console.error('Entry appears to be invalid???',claim)
-      array.splice(index, 1)
-    } else {
-      CLAIMS[i] = addr
-      console.log("Fixed up ens name to address",claim,addr)
-    }
-  }
-}
-
-await resolveENS()
 
 //////////////////////////////////////////////////////////////////////////////////
 //
@@ -113,7 +82,7 @@ async function getTransactions(address) {
         });
         console.log(`Cached page ${page}.`);
         page += 1;
-        await setTimeout(250); // Delay to respect rate limits (4 requests/sec)
+        await delay(250); // Delay to respect rate limits (4 requests/sec)
       } else {
         // Page is not fully populated; do not cache and stop fetching further pages
         console.log(`Page ${page} is not fully populated. Not caching and stopping fetch.`);
@@ -160,7 +129,7 @@ function aggregateDonations(filteredTxs) {
 
   for (const [address, totalWei] of Object.entries(totalsMap)) {
     if (totalWei < MIN_TOTAL_WEI) {
-//      continue;
+      continue;
     }
 
     let adjustedWei = totalWei;
@@ -188,8 +157,11 @@ async function sumTransactions() {
   	// fetch transactions
     const allTxs = await getTransactions(TARGET_ADDRESS);
 
+    // get claims
+    const claims = await donationQueryAll()
+
     // this is the set of claims
-    const claimsSet = new Set(CLAIMS);
+    const claimsSet = new Set(claims);
 
     // filter against claims
     const filteredTxs = filterTransactions(allTxs, claimsSet);
@@ -207,4 +179,18 @@ async function sumTransactions() {
   }
 }
 
-sumTransactions();
+
+router.post("/report", async (req, res, next) => {
+  try {
+    sumTransactions.then( transactions => {
+      if(!transactions) {
+        res.status(400)
+      } else {
+        res.status(200).json(transactions);
+      }
+    })
+  } catch (error) {
+    next(error);
+  }
+})
+

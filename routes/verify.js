@@ -1,36 +1,39 @@
 const express = require("express");
-const { verifySignature, validateTimestamp } = require("../helpers");
-const { donations, signatureValidityInMin } = require("../shared");
+const { fixupENS, verifySignature, validateTimestamp } = require("../helpers");
+const { donationSave, signatureValidityInMin } = require("../db");
 
 const router = express.Router();
 
 router.post("/", async (req, res, next) => {
-  const { ethAddress, namAddress, message, signature } = req.body;
+  let { ethAddress, namAddress, message, signature } = req.body;
 
   try {
+
+    // ens to addr or throw error
+    ethAddress = fixupENS(ethAddress)
+
     // Validate the timestamp
     const { messageTime, currentTime } = validateTimestamp(
       message,
       signatureValidityInMin
     );
 
-    // Verify the signature
+    // Verify the signatures - will throw an error on failure
     verifySignature(message, signature, ethAddress);
 
-    // TODO: Update the donations database
-    donations[ethAddress.toLowerCase()] = {
+    // Save donation - will throw an error on failure
+    donationSave({
+      ethAddress,
       namAddress,
+      message,
       messageTime,
       verifiedTime: currentTime,
-    };
-
-    console.log(
-      `Added: ${ethAddress} ${namAddress} ${messageTime} ${currentTime}.`
-    );
+    })
 
     res
       .status(200)
       .json({ success: true, message: "Address verified", data: namAddress });
+
   } catch (error) {
     next(error);
   }

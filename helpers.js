@@ -1,6 +1,15 @@
 const { ethers } = require("ethers");
 const { WhitelistedError } = require("./errors");
 
+const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${process.env.INFURA}`);
+
+async function fixupENS(addr) {
+  if (ethers.isAddress(addr)) return addr
+  addr = await provider.resolveName(addr)
+  if(!addr) throw new Error('Cannot resolve ethereum address')
+  return addr
+}
+
 const validateTimestamp = (message, validityInMinutes) => {
   const timestamp = message.split(":")[1]?.trim();
   const currentTime = new Date().getTime();
@@ -32,6 +41,7 @@ const verifySignature = (message, signature, expectedAddress) => {
 };
 
 module.exports = {
+  fixupENS,
   validateTimestamp,
   verifySignature,
 };
